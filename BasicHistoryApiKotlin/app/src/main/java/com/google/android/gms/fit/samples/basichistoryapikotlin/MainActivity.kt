@@ -23,26 +23,22 @@ import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.TextViewCompat
 import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.fit.samples.basichistoryapikotlin.view.DatePickerFragment
 import com.google.android.gms.fit.samples.common.logger.Log
 import com.google.android.gms.fit.samples.common.logger.LogView
 import com.google.android.gms.fit.samples.common.logger.LogWrapper
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter
 import com.google.android.gms.fitness.Fitness
 import com.google.android.gms.fitness.FitnessOptions
-import com.google.android.gms.fitness.data.DataPoint
-import com.google.android.gms.fitness.data.DataSet
-import com.google.android.gms.fitness.data.DataSource
-import com.google.android.gms.fitness.data.DataType
-import com.google.android.gms.fitness.data.Field
+import com.google.android.gms.fitness.data.*
 import com.google.android.gms.fitness.request.DataDeleteRequest
 import com.google.android.gms.fitness.request.DataReadRequest
 import com.google.android.gms.fitness.request.DataUpdateRequest
 import com.google.android.gms.fitness.result.DataReadResponse
 import com.google.android.gms.tasks.Task
+import kotlinx.android.synthetic.main.activity_main.*
 import java.text.DateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.TimeZone
+import java.util.*
 import java.util.concurrent.TimeUnit
 
 const val TAG = "BasicHistoryApi"
@@ -53,8 +49,7 @@ const val TAG = "BasicHistoryApi"
  * subsequent execution of the desired action.
  */
 enum class FitActionRequestCode {
-    INSERT_AND_READ_DATA,
-    UPDATE_AND_READ_DATA,
+    READ_BG_DATA,
     DELETE_DATA
 }
 
@@ -64,21 +59,28 @@ enum class FitActionRequestCode {
  * with Google Play Services and how to properly represent data in a {@link DataSet}.
  */
 class MainActivity : AppCompatActivity() {
+
+    private var selectedDate: Date = Date()
+
     private val dateFormat = DateFormat.getDateInstance()
+    private val dateTimeFormat = DateFormat.getDateTimeInstance()
     private val fitnessOptions: FitnessOptions by lazy {
         FitnessOptions.builder()
-                .addDataType(DataType.TYPE_STEP_COUNT_DELTA, FitnessOptions.ACCESS_WRITE)
-                .addDataType(DataType.AGGREGATE_STEP_COUNT_DELTA, FitnessOptions.ACCESS_WRITE)
+                .addDataType(HealthDataTypes.TYPE_BLOOD_GLUCOSE, FitnessOptions.ACCESS_READ)
+                .addDataType(HealthDataTypes.AGGREGATE_BLOOD_GLUCOSE_SUMMARY, FitnessOptions.ACCESS_READ)
                 .build()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
         initializeLogging()
+        printSelectedDate()
+        fitSignIn(FitActionRequestCode.READ_BG_DATA)
+    }
 
-        fitSignIn(FitActionRequestCode.INSERT_AND_READ_DATA)
+    private fun printSelectedDate() {
+        title_text_view.text = getString(R.string.intro_text, dateFormat.format(selectedDate))
     }
 
     /**
@@ -125,8 +127,7 @@ class MainActivity : AppCompatActivity() {
      * @param requestCode The code corresponding to the action to perform.
      */
     private fun performActionForRequestCode(requestCode: FitActionRequestCode) = when (requestCode) {
-        FitActionRequestCode.INSERT_AND_READ_DATA -> insertAndReadData()
-        FitActionRequestCode.UPDATE_AND_READ_DATA -> updateAndReadData()
+        FitActionRequestCode.READ_BG_DATA -> readBgData()
         FitActionRequestCode.DELETE_DATA -> deleteData()
     }
 
@@ -154,22 +155,7 @@ class MainActivity : AppCompatActivity() {
      * Inserts and reads data by chaining {@link Task} from {@link #insertData()} and {@link
      * #readHistoryData()}.
      */
-    private fun insertAndReadData() = insertData().continueWith { readHistoryData() }
-
-    /** Creates a {@link DataSet} and inserts it into user's Google Fit history. */
-    private fun insertData(): Task<Void> {
-        // Create a new dataset and insertion request.
-        val dataSet = insertFitnessData()
-
-        // Then, invoke the History API to insert the data.
-        Log.i(TAG, "Inserting the dataset in the History API.")
-        return Fitness.getHistoryClient(this, getGoogleAccount())
-                .insertData(dataSet)
-                .addOnSuccessListener { Log.i(TAG, "Data insert was successful!") }
-                .addOnFailureListener { exception ->
-                    Log.e(TAG, "There was a problem inserting the dataset.", exception)
-                }
-    }
+    private fun readBgData() = readHistoryData()
 
     /**
      * Asynchronous task to read the history data. When the task succeeds, it will print out the
@@ -231,15 +217,19 @@ class MainActivity : AppCompatActivity() {
     private fun queryFitnessData(): DataReadRequest {
         // [START build_read_data_request]
         // Setting a start and end date using a range of 1 week before this moment.
-        val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-        val now = Date()
-        calendar.time = now
-        val endTime = calendar.timeInMillis
-        calendar.add(Calendar.WEEK_OF_YEAR, -1)
+        val calendar = Calendar.getInstance()
+        calendar.time = selectedDate
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
         val startTime = calendar.timeInMillis
+        calendar.set(Calendar.HOUR_OF_DAY, 24)
+        val endTime = calendar.timeInMillis
 
-        Log.i(TAG, "Range Start: ${dateFormat.format(startTime)}")
-        Log.i(TAG, "Range End: ${dateFormat.format(endTime)}")
+        clearLogView()
+        printSelectedDate()
+        Log.i(TAG, "Range Start: ${dateTimeFormat.format(startTime)}")
+        Log.i(TAG, "Range End: ${dateTimeFormat.format(endTime)}")
 
         return DataReadRequest.Builder()
                 // The data request can specify multiple data types to return, effectively
@@ -247,11 +237,10 @@ class MainActivity : AppCompatActivity() {
                 // In this example, it's very unlikely that the request is for several hundred
                 // datapoints each consisting of a few steps and a timestamp.  The more likely
                 // scenario is wanting to see how many steps were walked per day, for 7 days.
-                .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
+                .read(HealthDataTypes.TYPE_BLOOD_GLUCOSE)
                 // Analogous to a "Group By" in SQL, defines how data should be aggregated.
                 // bucketByTime allows for a time span, whereas bucketBySession would allow
                 // bucketing by "sessions", which would need to be defined in code.
-                .bucketByTime(1, TimeUnit.DAYS)
                 .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
                 .build()
     }
@@ -285,12 +274,11 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "Data returned for Data type: ${dataSet.dataType.name}")
 
         for (dp in dataSet.dataPoints) {
-            Log.i(TAG, "Data point:")
+            Log.i(TAG, "-------------")
             Log.i(TAG, "\tType: ${dp.dataType.name}")
-            Log.i(TAG, "\tStart: ${dp.getStartTimeString()}")
-            Log.i(TAG, "\tEnd: ${dp.getEndTimeString()}")
+            Log.i(TAG, "\tTime: ${dp.getTimeStampAsString()}")
             dp.dataType.fields.forEach {
-                Log.i(TAG, "\tField: ${it.name} Value: ${dp.getValue(it)}")
+                Log.i(TAG, "\t${it.name}: ${dp.getValue(it)}")
             }
         }
     }
@@ -404,17 +392,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            R.id.action_delete_data -> {
-                fitSignIn(FitActionRequestCode.DELETE_DATA)
+            R.id.action_select_date -> {
+                showDatePicker()
                 true
             }
-            R.id.action_update_data -> {
-                clearLogView()
-                fitSignIn(FitActionRequestCode.UPDATE_AND_READ_DATA)
+            R.id.action_refresh -> {
+                fitSignIn(FitActionRequestCode.READ_BG_DATA)
                 true
             }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    private fun showDatePicker() {
+        DatePickerFragment(this, selectedDate) { date ->
+            run {
+                selectedDate = date
+                fitSignIn(FitActionRequestCode.READ_BG_DATA)
+            }
+        }.show(supportFragmentManager, "DATE_PICKER")
     }
 
     /** Clears all the logging message in the LogView.  */
