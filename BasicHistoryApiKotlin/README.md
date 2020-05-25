@@ -1,6 +1,9 @@
 Android Fit History Api Sample
 ============
 
+*Update read Blood Glucose records by date...*
+
+
 A simple example of how to use the History API on the Android Fit platform.
 
 
