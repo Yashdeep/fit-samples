@@ -1,8 +1,9 @@
 Android Fit History Api Sample
 ============
 
-*Update read Blood Glucose records by date...*
 
+Update in fork: Read Blood Glucose record by date from from google fit. 
+--------------
 
 A simple example of how to use the History API on the Android Fit platform.
 
