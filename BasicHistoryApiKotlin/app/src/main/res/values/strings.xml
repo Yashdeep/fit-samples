@@ -16,7 +16,7 @@
 <resources>
 
     <string name="app_name">Read BG (Google Fit)</string>
-    <string name="intro_text">Selected date: %s</string>
+    <string name="intro_text">Selected date: %s - %s</string>
     <string name="action_signout">Sign out</string>
     <string name="select_date">Select Date</string>
     <string name="refresh">Refresh</string>

@@ -61,6 +61,7 @@ enum class FitActionRequestCode {
 class MainActivity : AppCompatActivity() {
 
     private var selectedDate: Date = Date()
+    private var endDate: Date = Date()
 
     private val dateFormat = DateFormat.getDateInstance()
     private val dateTimeFormat = DateFormat.getDateTimeInstance()
@@ -80,7 +81,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun printSelectedDate() {
-        title_text_view.text = getString(R.string.intro_text, dateFormat.format(selectedDate))
+        title_text_view.text = getString(R.string.intro_text, dateFormat.format(selectedDate), dateFormat.format(endDate))
     }
 
     /**
@@ -223,6 +224,10 @@ class MainActivity : AppCompatActivity() {
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
         val startTime = calendar.timeInMillis
+        calendar.time = endDate
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.HOUR_OF_DAY, 24)
         val endTime = calendar.timeInMillis
 
@@ -273,12 +278,26 @@ class MainActivity : AppCompatActivity() {
     private fun dumpDataSet(dataSet: DataSet) {
         Log.i(TAG, "Data returned for Data type: ${dataSet.dataType.name}")
 
+        var serialNum = "NULL"
+        var model = "NULL"
         for (dp in dataSet.dataPoints) {
             Log.i(TAG, "-------------")
             Log.i(TAG, "\tType: ${dp.dataType.name}")
-            Log.i(TAG, "\tTime: ${dp.getTimeStampAsString()}")
+            Log.i(TAG, "\tDate/Time: ${dateTimeFormat.format(dp.getTimestamp(TimeUnit.MILLISECONDS))} ${dateFormat.timeZone.getDisplayName(false, TimeZone.SHORT)}")
+            serialNum = "NULL"
+            model = "NULL"
+            if (dp.originalDataSource.device != null) {
+                serialNum = dp.originalDataSource.device!!.uid
+                model = dp.originalDataSource.device!!.model
+            }
+            Log.i(TAG, "\tPackage: ${dp.originalDataSource.appPackageName}")
+            Log.i(TAG, "\tRaw Type: ${dp.originalDataSource.type}")
+            Log.i(TAG, "\tStream: ${dp.originalDataSource.streamName}")
+            Log.i(TAG, "\tData Device S/N: ${serialNum}")
+            Log.i(TAG, "\tData Device Name: ${model}")
+            Log.i(TAG, "\tData Device: ${dp.originalDataSource.streamIdentifier}")
             dp.dataType.fields.forEach {
-                Log.i(TAG, "\t${it.name}: ${dp.getValue(it)}")
+                Log.i(TAG, "\t\t${it.name}: ${dp.getValue(it)}")
             }
         }
     }
@@ -408,7 +427,12 @@ class MainActivity : AppCompatActivity() {
         DatePickerFragment(this, selectedDate) { date ->
             run {
                 selectedDate = date
-                fitSignIn(FitActionRequestCode.READ_BG_DATA)
+                DatePickerFragment(this, endDate) { date ->
+                    run {
+                        endDate = date
+                        fitSignIn(FitActionRequestCode.READ_BG_DATA)
+                    }
+                }.show(supportFragmentManager, "DATE_PICKER")
             }
         }.show(supportFragmentManager, "DATE_PICKER")
     }
